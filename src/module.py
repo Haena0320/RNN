@@ -35,24 +35,34 @@ class Decoder(nn.Module):
         self.linear.weight.data.uniform_(-0.1, 0.1)
         self.span.weight.data.uniform_(-0.1, 0.1)
 
-    def forward(self,h_s,decoder_input, attn_mask=None):
+    def forward(self, h_s, decoder_input, attn_mask=None):
+        h_t, _ = self.lstm(self.embedding(decoder_input))
+        context = self.attn(h_s, h_t, mask=attn_mask)
+        output = torch.cat([context, h_t], dim=-1)
+        output = self.activation(self.linear(output))
+        output = self.span(output)
+        return output
+
+
+    def search(self,h_s,decoder_input, attn_mask=None):
         """
         :param decoder_input: (bs, 1)
         :param h_s: (bs, seq, dim)
         """
-        h_t, _ = self.lstm(self.embedding(decoder_input)) # h_t : (bs, 1, dim)
+    
+        h_t, _ = self.lstm(self.embedding(decoder_input).unsqueeze(1)) # h_t : (bs, 1, dim)
         context = self.attn(h_s, h_t, mask=attn_mask) # (bs,1,dim)
-        output = torch.cat([context,h_t], dim=2) #(bs, 1, 2*dim)
+        output = torch.cat([context,h_t], dim=-1) #(bs, 1, 2*dim)
         output = self.activation(self.linear(output)) # (bs, 1, dim)
         output = self.span(output) #(bs, 1, vocab)
-        return output
+        return output.squeeze(1)
 
 class Attention(nn.Module):
     def __init__(self, method, hidden, max_sent=None):
         super(Attention, self).__init__()
         self.method = method
         if method =="location":
-            self.linear = nn.Linear(hidden, max_sent, bias=False)
+            self.linear = nn.Linear(hidden, max_sent-1, bias=False)
         else:
             self.linear = nn.Linear(hidden, hidden, bias=False)
         self.softmax = nn.Softmax(dim=-1)
@@ -72,11 +82,12 @@ class Attention(nn.Module):
             attn_weight = self.linear(h_s) #(bs, seq, dim)
             query = h_t.transpose(1,2).contiguous() #(bs, dim, 1)
             attn_weight = torch.bmm(attn_weight, query).squeeze(-1) #(bs, seq_s)
-
         if mask is not None:  # padding -> -inf
-            attn_weight *= mask
-        attn_weight =self.softmax(attn_weight) #(bs, seq_s)
-        context = torch.bmm(attn_weight.unsqueeze(1), h_s) # (bs, 1, dim)
+            attn_mask = mask.unsqueeze(1)*(-2**32)
+            attn_weight = mask.unsqueeze(1).eq(0).float()*attn_weight + attn_mask
+
+        attn_weight =self.softmax(attn_weight) #(bs,1, seq_s)
+        context = torch.bmm(attn_weight, h_s) # (bs, 1, dim)
         return context
 
 

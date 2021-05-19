@@ -30,16 +30,19 @@ def data_prepro(input_path, save_path, model_path):
 
 def get_data_loader(data_list, batch_size, shuffle=True, num_workers=10, drop_last=True):
     dataset = Make_Dataset(data_list)
-    data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers, drop_last=drop_last)
+    data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers, drop_last=drop_last, collate_fn=make_padding)
     return data_loader
 
 def make_padding(samples):
     def padd(samples):
         length = [len(s) for s in samples]
-        max_length = max(length)
+        max_length = 50
         batch = torch.zeros(len(length), max_length).to(torch.long)
         for idx, sample in enumerate(samples):
-            batch[idx, :length[idx]] = torch.LongTensor(sample)
+            if length[idx] < 50:
+                batch[idx, :length[idx]] = torch.LongTensor(sample)
+            else:
+                batch[idx, :max_length] = torch.LongTensor(sample[:max_length])
         return torch.LongTensor(batch)
     encoder = [sample["encoder"] for sample in samples]
     decoder = [sample["decoder"] for sample in samples]
@@ -50,7 +53,7 @@ def make_padding(samples):
 class Make_Dataset(Dataset):
     def __init__(self, path):
         self.encoder_input = torch.load(path[0])
-        self.decoder_input = roch.load(path[1])
+        self.decoder_input = torch.load(path[1])
 
         self.encoder_input = np.array(self.encoder_input, dtype=object)
         self.decoder_input = np.array(self.decoder_input, dtype=object)

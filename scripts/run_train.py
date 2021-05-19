@@ -21,10 +21,10 @@ config = load_config(args.config)
 assert args.model in ["g", "l"]
 
 use_cuda = torch.cuda.is_available()
-device = torch.device("cuda:{}" if use_cuda and args.gpu is not None else "cpu")
+device = torch.device("cuda:{}".format(args.gpu) if use_cuda and args.gpu is not None else "cpu")
 
 ## log directory
-oj = os.path.join()
+oj = os.path.join
 log_dir = "./log/"
 model_dir = oj(log_dir, args.model)
 loss_dir = oj(model_dir,"loss")
@@ -38,24 +38,29 @@ if not os.path.exists(model_dir):
 writer = SummaryWriter(loss_dir)
 
 ## data load
+from src.data import *
 data = config.data_info
-train_data = [data.raw_tr_en, data.raw_tr_de]
-test_data = [data.raw_te_en, data.raw_te_de]
+train_data = [data.prepro_tr_en, data.prepro_tr_de]
+#train_data = [data.prepro_te_en, data.prepro_te_de]
+test_data = [data.prepro_te_en, data.prepro_te_de]
 train_loader = get_data_loader(train_data, config.train.bs)
 test_loader = get_data_loader(test_data, config.train.bs)
 
 ## model load
 from src.model import Seq2seq
+from src.train import *
+
 model = Seq2seq(config, args, device)
+model.init_weights()
 optimizer = get_optimizer(model, args.optim)
+scheduler = get_lr_scheduler(optimizer, config)
 
 ## trainer load
-from src.train import *
 trainer = get_trainer(config, args, device,train_loader, writer, 'train')
 tester = get_trainer(config, args, device, test_loader, writer, "test")
 
 trainer.init_optimizer(optimizer)
-trainer.init_scheduler(optimizer, config)
+trainer.init_scheduler(scheduler)
 
 ## decoder load
 sp = spm.SentencePieceProcessor()
