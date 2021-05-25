@@ -1,153 +1,148 @@
+import sys, os
+sys.path.append(os.getcwd())
 import torch
-import os
-from torch.utils.data import DataLoader, Dataset
-from src.model_2 import *
-import torch.optim as optim
-import time
-from tqdm import tqdm
-from torch.cuda.amp import autocast
-from sacremoses import MosesDetokenizer
+from torch.cuda import amp
 import sacrebleu
+from sacremoses import MosesDetokenizer
+from tqdm import tqdm
+import tqdm
 
-## train_loader
 def get_trainer(config, args, device, data_loader, writer, type):
     return Trainer(config, args, device, data_loader, writer, type)
 
-
 def get_optimizer(model, args_optim):
-    if args_optim == "adam":
+    if args_optim =="sgd":
+        return torch.optim.SGD(model.parameters(), lr=1)
+    else:
         return torch.optim.Adam(model.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-09)
-    if args_optim == 'adamW':
-        return torch.optim.AdamW(params, lr=0, betas=(0.9, 0.999), eps=1e-08, weight_decay=0.01, amsgrad=False)
 
-
-def get_lr_schedular(optimizer, config):
-    h_units = config.model.h_units
+def get_lr_scheduler(optimizer, config):
     warmup = config.train.warmup
-    # return torch.optim.lr_scheduler.CyclicLR(optimizer, base_lr=0.001, max_lr=0.1, step_size_up=4000, step_size_down=total_iter_num,cycle_momentum=False, mode='triangular')
-    return WarmupLinearshedular(optimizer, h_units, warmup)
+    return Warmupscheduler(optimizer, warmup)
 
-
-class WarmupLinearshedular:
-    def __init__(self, optimizer, h_units, warmup):
+class Warmupscheduler:
+    def __init__(self,optimizer, warmup):
         self.optimizer = optimizer
         self._step = 0
         self.warmup = warmup
-        self.h_units = h_units
-        self._rate = 0
+        self._rate = 1
 
     def step(self):
         self._step += 1
-        rate = self.rate()
-        for p in self.optimizer.param_groups:
-            p["lr"] = rate
-        self._rate = rate
+        if self._step > self.warmup:
+            self.rate()
+            for p in self.optimizer.param_groups:
+                p["lr"] = self._rate
+
         self.optimizer.step()
 
-    def rate(self, step=None):
-        if step is None:
-            step = self._step
-        return self.h_units ** (-.5) * min(step ** (-.5), step * self.warmup ** (-1.5))
+    def rate(self):
+        self._rate /= 2
+
 
 
 class Trainer:
-    def __init__(self, config, args, device, data_loader, writer, type):
+    def __init__(self, config, args, device,data_loader,writer, type):
         self.config = config
         self.args = args
         self.device = device
         self.data_loader = data_loader
-        self.writer = writer
         self.type = type
-        self.accum = self.config.train.accumulation_step
-        self.ckpnt_step = self.config.train.ckpnt_step
-        self.global_step = 1
-        self.train_loss = 0
+        self.writer = writer
+        self.global_step = 0
+        self.ckpnt_step = 1000
+        self.gradscaler = amp.GradScaler()
         if self.type != "train":
             self.md = MosesDetokenizer(lang="du")
 
-    def init_optimizer(self, optimizer):
+    def init_optimizer(self,optimizer):
         self.optimizer = optimizer
 
-    def init_schedular(self, scheduler):
+    def init_scheduler(self, scheduler):
         self.scheduler = scheduler
 
     def log_writer(self, log, step):
-        if self.type == "train":
+        if self.type =="train":
             lr = self.optimizer.param_groups[0]["lr"]
-            self.writer.add_scalar("train/loss", log, self.global_step)
-            self.writer.add_scalar("train/lr", lr, self.global_step)
+            self.writer.add_scalar("train/loss", log,step)
+            self.writer.add_scalar("train/lr", lr, step)
         else:
             self.writer.add_scalar("valid/loss", log, step)
 
     def train_epoch(self, model, epoch, save_path=None, sp=None):
-        if self.type == "train":
+        if self.type =="train":
             model.train()
 
         else:
             model.eval()
+            total_bleu = list()
 
         model.to(self.device)
-        loss_save = list()
 
-        for data in tqdm(self.data_loader, desc="Epoch : {}".format(epoch)):
-            with autocast():
-                encoder_input = data["encoder"][:, 1:].to(self.device)  # 16, 99
-                decoder_input = data["decoder"].to(self.device)  # 16, 100
-                loss = model(encoder_input, decoder_input)
-                # model(encoder_input, decoder_input)
-                if self.type == 'train':
-                    if self.global_step % self.ckpnt_step == 0:
-                        torch.save({"epoch": epoch,
-                                    "model_state_dict": model.state_dict(),
-                                    "optimizer_stata_dict": self.optimizer.state_dict()},
-                                   save_path + "ckpnt_{}".format(self.global_step//self.ckpnt_step))
+        for iter in tqdm.tqdm(self.data_loader):
+            with amp.autocast():
+                en_x = iter['encoder'].to(self.device) # 128, 51 [0,1,2,3,4]
+                dn_x = iter["decoder"].to(self.device) # 128, 51 [0,1,2,3,4]
+
+                if self.type =="train":
+                    loss = model(en_x, dn_x, predict=False)
+                    self.global_step += 1
+                    if self.global_step % self.ckpnt_step ==0:
+                        torch.save({"epoch":epoch,
+                                    "model_sate_dict":model.state_dict(),
+                                    "optimizer_state_dict":self.optimizer.state_dict(), 
+                                    "lr_step":self.scheduler._step},
+                                   save_path+'ckpnt_{}'.format(epoch))
 
                     self.log_writer(loss.data, self.global_step)
-                    self.optim_process(model, self.global_step, loss)
-                    self.global_step += 1
+                    self.gradscaler.scale(loss).backward()
+                    self.gradscaler.unscale_(self.optimizer)
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), self.config.train.clip)
+                    self.gradscaler.step(self.optimizer)
+                    self.gradscaler.update()
+                    self.optimizer.zero_grad()
 
                 else:
-                    bs, input_length = encoder_input.size()
-                    sos = torch.ones(bs).unsqueeze(1)  # (bs, 1) -> <bos> token id = 1
-                    max_length = input_length + 50
-
-                    for i in range(max_length):
-                        y = model.search(encoder_input, sos)
-                        sos = torch.cat([sos, y], dim=-1)
+                    prediction = model(en_x, dn_x, predict=True)
+                    bs, _ =prediction.size()
 
                     pred = list()
                     truth = list()
-
-                    tokens = sos[:,1:].tolist()
-                    for i, token in enumerate(tokens):
-                        for j in range(len(token)):
-                            if token[j] == 2:
-                                token = token[:j]
+                    for i in range(bs):
+                        p = prediction[i,:]
+                        p = p.tolist()
+                        for j in range(len(p)):
+                            if p[j] ==2: # end token
+                                p = p[:j]
                                 break
-                        de_token = sp.DecodeIds(token)
-                        de_truth = sp.DecodeIds(decoder_input[i,:].tolist())
+                        de_token = sp.DecodeIds(p)
+                        de_truth = sp.DecodeIds(dn_x[i,:].tolist())
                         pred.append(de_token)
                         truth.append(de_truth)
-
                     pred = [self.md.detokenize(i.strip().split()) for i in pred]
                     truth = [self.md.detokenize(i.strip().split()) for i in truth]
 
+                    print("truth ver {}".format(truth[0]))
+                    print("prediction ver {}".format(pred[0]))
+
                     assert len(pred) == len(truth)
                     bleu = [sacrebleu.corpus_bleu(pred[i], truth[i]).score for i in range(len(pred))]
-                    total_bleu.append(sum(bleu) / len(bleu))
-
-        print("total_bleu per epoch : {}".format(sum(total_bleu) / len(total_bleu)))
+                    total_bleu.append(sum(bleu)/len(bleu))
 
 
-
-
-    def optim_process(self, model, optim_step, loss):
-        loss /= self.accum
-        loss.backward()
-        self.train_loss += loss.data
-        if optim_step % self.accum == 0:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), self.config.train.clip)
-            self.optimizer.step()
+        if self.type == "train":
             self.scheduler.step()
-            self.optimizer.zero_grad()
-            self.train_loss = 0
+            return None
+        else:
+            print("total_bleu per epoch : {}".format(sum(total_bleu)/len(total_bleu)))
+
+
+
+
+
+
+
+
+
+
+
