@@ -65,21 +65,21 @@ if args.use_pretrained:
     optimizer = train.get_optimizer(model, args.optim)
     optimizer.load_state_dict(checkpoint.optimizer_stata_dict)
 
-    schedular = train.get_lr_scheduler(optimizer, config)
-    schedular._step = checkpoint.lr_step
+    scheduler = train.get_lr_scheduler(optimizer, config)
+    scheduler._step = checkpoint.lr_step
 
     trainer.init_optimizer(optimizer)
-    trainer.init_schedular(schedular)
+    trainer.init_scheduler(scheduler)
 
     total_epoch = checkpoint.epoch
     model.train()
 
 else:
     optimizer = train.get_optimizer(model, args.optim)
-    schedular = train.get_lr_scheduler(optimizer, config)
+    scheduler = train.get_lr_scheduler(optimizer, config)
 
     trainer.init_optimizer(optimizer)
-    trainer.init_schedular(schedular)
+    trainer.init_scheduler(scheduler)
 
     total_epoch = 12
     print("total epoch {}".format(total_epoch))
