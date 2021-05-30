@@ -18,6 +18,7 @@ class Seq2seq(nn.Module):
         self.encoder = Encoder(vocab_size, hidden, num_layers)
         self.decoder = Decoder(vocab_size, hidden, self.max_sent, num_layers, method)
         self.criterion = nn.CrossEntropyLoss(ignore_index=0)
+        self.cnt = 0
         
     def init_weights(self):
         self.encoder.init_weights()
@@ -30,33 +31,37 @@ class Seq2seq(nn.Module):
         :param predict: [1,2,3,4]
         :return:
         """
-        en_input = torch.fliplr(en_input[:,1:])
+        en_input = en_input[:,1:].contiguous()
         h_s, _ = self.encoder(en_input)
         attn_mask = en_input.eq(0).float() # (bs, seq) = (128, 50)
 
         if predict == False:
-            mask = 1-de_input.eq(2).float()
-            input = mask.long()*de_input
-            input = input[:,:-1]
-            truth = de_input[:,1:].contiguous()
-            bs, seq = truth.size()  # (128,50)
+            self.cnt +=1 
+            input = de_input[:, :-1].contiguous()
+            truth = de_input[:, 1:].contiguous()
+            bs, seq = input.size()  # (128,50)
             pred = self.decoder(h_s, input, attn_mask)
             loss = self.criterion(pred.view(bs*seq, -1), truth.view(-1))
-            return loss
+
+            pred_ = torch.argmax(pred, dim=-1)
+
+            truth_ = sum(pred_.eq(truth).float()) / sum(1-truth.eq(0).float())
+            truth_ = torch.mean(truth_*100)
+
+            return loss, truth_
 
         else: # predict mode
             h_t = de_input[:,0] #(bs)
             h_t = h_t.unsqueeze(1) #(bs, 1)
             for idx in range(self.max_sent):
                 output = self.decoder.search(h_s, h_t, attn_mask) #(bs, n, vocab)
-                output = torch.argmax(output, dim=-1) #(bs, 1)
+                output = torch.argmax(output, dim=-1) #(bs, n)
                 if len(output.size()) > 1:
                     output = output[:,-1].unsqueeze(1)
                 else:
                     output = output.unsqueeze(1)
-                h_t= torch.cat([h_t, output], dim=-1)
-            return h_t[1:, :].long()
-
+                h_t = torch.cat([h_t, output], dim=-1)
+            return h_t[:, 1:].long() #(bs, max_sent-1)
 
 
 

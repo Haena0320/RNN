@@ -81,11 +81,11 @@ class Trainer:
 
         for iter in tqdm.tqdm(self.data_loader):
             with amp.autocast():
-                en_x = iter['encoder'].to(self.device) # 128, 51 [0,1,2,3,4]
+                en_x = iter['encoder'].to(self.device) # 128, 51 [0,4,3,2,1]
                 dn_x = iter["decoder"].to(self.device) # 128, 51 [0,1,2,3,4]
 
                 if self.type =="train":
-                    loss = model(en_x, dn_x, predict=False)
+                    loss, pred = model(en_x, dn_x, predict=False)
                     self.global_step += 1
                     if self.global_step % self.ckpnt_step ==0:
                         torch.save({"epoch":epoch,
@@ -95,6 +95,7 @@ class Trainer:
                                    save_path+'ckpnt_{}'.format(epoch))
 
                     self.log_writer(loss.data, self.global_step)
+                    self.writer.add_scalar("train/accuracy",pred.data, self.global_step)
                     self.gradscaler.scale(loss).backward()
                     self.gradscaler.unscale_(self.optimizer)
                     torch.nn.utils.clip_grad_norm_(model.parameters(), self.config.train.clip)

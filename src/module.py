@@ -15,7 +15,6 @@ class Encoder(nn.Module):
         self.embedding.weight.data.uniform_(-0.1, 0.1)
 
     def forward(self, x):
-        bs, seq = x.size()
         output =self.embedding(x)
         output ,h = self.lstm(output)
         return output, h
@@ -76,20 +75,18 @@ class Attention(nn.Module):
         :return:
         """
         if self.method =="location":
-            attn_weight = self.linear(h_t) # (bs, max_len-1, seq_s)
-
+            attn_weight = self.linear(h_t) # (bs, seq_s, seq_s)
         else: # general
             attn_weight = self.linear(h_s) #(bs, seq_s, dim)
             query = h_t.transpose(1,2).contiguous() #(bs, dim, 1)
             attn_weight = torch.bmm(attn_weight, query).squeeze(-1) #(bs, seq_s)
             
         if mask is not None:  # padding -> -inf
-
             attn_mask = mask.unsqueeze(1)*(-1e10) # (bs, 1, seq_s)
-            attn_weight = mask.unsqueeze(1).eq(0).float()*attn_weight + attn_mask
+            attn_weight = attn_weight + attn_mask
 
-        attn_weight =self.softmax(attn_weight) #(bs,1, seq_s)
-        context = torch.bmm(attn_weight, h_s) # (bs, 1, dim)
+        attn_weight =self.softmax(attn_weight) #(bs , seq_s)
+        context = torch.bmm(attn_weight, h_s) # (bs, seq_s, seq_s)
         return context
 
 
@@ -98,10 +95,10 @@ if __name__ =='__main__':
     decoder = Decoder(3000, 1000,4, method="general")
 
     encoder_x = torch.arange(0, 1000).view(20, -1).long()
-    decoder_x = torch.arange(0, 20).long().unsqueeze(1) # (bs, 1)
+    decoder_x = torch.arange(0, 1000).view(20,-1).long() # (bs, 1)
 
     h_s, _ = encoder(encoder_x)
-    attn_mask = encoder_x.eq(0).float()*(-1e10)
-    context = decoder(h_s,decoder_x,attn_mask)
-    print(context)
+    context = decoder(h_s,decoder_x,encoder_x)
+    print(torch.argmax(context, dim=-1))
+    print(decoder_x)
 

@@ -3,6 +3,7 @@ import logging
 import torch
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
+import re
 
 def encoding(input_file, vocab_size, vocab_path, model_name,model_type):
     pad=0
@@ -15,15 +16,34 @@ def encoding(input_file, vocab_size, vocab_path, model_name,model_type):
     spm.SentencePieceTrainer.Train(cmd)
     logging.info("model, vocab finished ! ")
     f = open(model_name+".vocab", encoding='utf-8')
-    v = [doc.strip().split("\t") for doc in f]
+    v = [clean_str(doc).strip().split("\t") for doc in f]
     word2idx = {w[0]: i for i, w in enumerate(v)}
     torch.save(word2idx, vocab_path)
+
+def clean_str(string):
+    string = re.sub(r"[^A-Za-z0-9(),!?\'\']", " ", string)
+    string = re.sub(r"\'s", " \'s", string)
+    string = re.sub(r"\'ve", " \'ve", string)
+    string = re.sub(r"n\'t", " n\'t", string)
+    string = re.sub(r"\'re", " \'re", string)
+    string = re.sub(r"\'d", " \'d", string)
+    string = re.sub(r"\'ll", " \'ll", string)
+    string = re.sub(r",", " , ", string)
+    string = re.sub(r"!", " ! ", string)
+    string = re.sub(r"\(", " ( ", string)
+    string = re.sub(r"\)", " ) ", string)
+    string = re.sub(r"\?", " ? ", string)
+    string = re.sub(r"\??", " ?? ", string)
+    string = re.sub(r"\s{2,}", " ", string)
+    # return string.strip().lower()
+    return string
+
 
 def data_prepro(input_path, save_path, model_path):
     f = open(input_path)
     sp = spm.SentencePieceProcessor()
     sp.Load(model_path)
-    sp.SetEncodeExtraOptions('bos:eos')
+    sp.SetEncodeExtraOptions('reverse:bos:eos')
     ids = [np.array(sp.EncodeAsIds(line)) for line in f.readlines()]
     torch.save(ids, save_path)
     logging.info("data save ! ")
@@ -43,7 +63,7 @@ def make_padding(samples):
                 batch[idx, :length[idx]] = torch.LongTensor(sample)
             else:
                 batch[idx, :max_length] = torch.LongTensor(sample[:max_length])
-                
+
         return torch.LongTensor(batch)
     encoder = [sample["encoder"] for sample in samples]
     decoder = [sample["decoder"] for sample in samples]
