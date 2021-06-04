@@ -74,7 +74,7 @@ if args.use_pretrained:
     trainer.init_optimizer(optimizer)
     trainer.init_scheduler(scheduler)
 
-    total_epoch = args.epochs-checkpoint["epoch"]
+    total_epoch = 10
     model.train()
 
 else:
@@ -84,8 +84,7 @@ else:
     trainer.init_optimizer(optimizer)
     trainer.init_scheduler(scheduler)
 
-    total_epoch = args.epoch
-
+    total_epoch = 13
 
 print("total epoch {}".format(total_epoch))
 

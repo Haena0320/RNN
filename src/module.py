@@ -62,7 +62,7 @@ class Attention(nn.Module):
         super(Attention, self).__init__()
         self.method = method
         if method =="location":
-            self.linear = nn.Linear(hidden, max_sent, bias=False)
+            self.linear = nn.Linear(hidden, max_sent+1, bias=False)
         else:
             self.linear = nn.Linear(hidden, hidden, bias=False)
         self.softmax = nn.Softmax(dim=-1)

@@ -30,7 +30,7 @@ use_cuda = torch.cuda.is_available()
 device = torch.device("cuda:{}".format(args.gpu) if use_cuda and args.gpu is not None else "cpu")
 print("current device {}".format(device))
 ## model load -> valid -> best_ckpnt
-checkpoint = torch.load("/user15/workspace/RNN/log/g/ckpntckpnt_2", map_location=device)
+checkpoint = torch.load("/user15/workspace/RNN/log/g/ckpntckpnt_3", map_location=device)
 model  = Seq2seq(config, args, device)
 model.to(device)
 model.load_state_dict(checkpoint["model_sate_dict"])
@@ -51,7 +51,7 @@ md = MosesDetokenizer(lang="du")
 
 
 sp = spm.SentencePieceProcessor()
-sp.Load("word_piece_encoding.model")
+sp.Load("de_word.model")
 
 import os
 # eval_dir = "./log/g/eval/"
@@ -67,6 +67,7 @@ for data_iter in tqdm(data_loader):
 
     y = model(encoder_input, decoder_input, predict=True) #(bs, seq)
     tokens = y.tolist()
+    print(len(tokens))
     for i, token in enumerate(tokens):
         for j in range(len(token)):
             if token[j] == 2:
@@ -76,7 +77,6 @@ for data_iter in tqdm(data_loader):
         print(decode_tokens)
 
         decode_truth = sp.DecodeIds(decoder_input[i,:].tolist())
-        decode_truth = decode_truth.replace("??", "")
         print(decode_truth)
         pred = md.detokenize(decode_tokens.strip().split())
         truth = md.detokenize(decode_truth.strip().split())
@@ -87,3 +87,4 @@ for data_iter in tqdm(data_loader):
 
 print("total bleu :{}".format(sum(total_bleu)/len(total_bleu)))
 print("prediction finished..")
+

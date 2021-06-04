@@ -17,7 +17,7 @@ class Seq2seq(nn.Module):
 
         self.encoder = Encoder(vocab_size, hidden, num_layers)
         self.decoder = Decoder(vocab_size, hidden, self.max_sent, num_layers, method)
-        self.criterion = nn.CrossEntropyLoss(ignore_index=0)
+        self.criterion = nn.CrossEntropyLoss(ignore_index=3)
         self.cnt = 0
         
     def init_weights(self):
@@ -31,16 +31,17 @@ class Seq2seq(nn.Module):
         :param predict: [1,2,3,4]
         :return:
         """
-        en_input = en_input[:,1:].contiguous()
+
         h_s, _ = self.encoder(en_input)
         attn_mask = en_input.eq(0).float() # (bs, seq) = (128, 50)
 
         if predict == False:
-            self.cnt +=1 
-            input = de_input[:, :-1].contiguous()
+            self.cnt +=1
             truth = de_input[:, 1:].contiguous()
-            bs, seq = input.size()  # (128,50)
-            pred = self.decoder(h_s, input, attn_mask)
+
+            pred = self.decoder(h_s, de_input, attn_mask)
+            pred = pred[:, :-1].contiguous()
+            bs, seq,_ = pred.size()
             loss = self.criterion(pred.view(bs*seq, -1), truth.view(-1))
 
             pred_ = torch.argmax(pred, dim=-1)

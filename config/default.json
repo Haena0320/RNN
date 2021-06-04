@@ -1,7 +1,8 @@
 {"train": {"epoch": 12, "optim": "sgd", "bs": 128, "warmup": 8, "clip": 1},
 "model": {"vocab_size": 50000, "max_sent_len": 50},
 "lstm": {"num_layers": 4, "hidden": 1000, "d_rate": 0.2},
-"data_info": {"raw_tr_total": "./data/raw/en_de/train/train.sum.txt",
+"data_info": {"raw_en_total": "./data/raw/en_de/train/en_all.txt",
+                "raw_de_total": "./data/raw/en_de/train/de_all.txt",
               "raw_tr_de":"./data/raw/en_de/train/train.de.txt",
               "raw_tr_en": "./data/raw/en_de/train/train.en.txt",
               "raw_te_en": "./data/raw/en_de/test/newstest2014.en.txt",
@@ -13,4 +14,4 @@
               "vocab_size": 50000,
               "vocab_path": {"en":"./data/prepro/en_de/en_vocab.pkl", "de": "./data/prepro/en_de/de_vocab.pkl"},
               "model_name": {"en":"en_word","de": "de_word"},
-              "model_type": "word"}}
+              "model_type": "bpe"}}
