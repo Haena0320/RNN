@@ -17,7 +17,7 @@ class Seq2seq(nn.Module):
 
         self.encoder = Encoder(vocab_size, hidden, num_layers)
         self.decoder = Decoder(vocab_size, hidden, self.max_sent, num_layers, method)
-        self.criterion = nn.CrossEntropyLoss(ignore_index=3)
+        self.criterion = nn.CrossEntropyLoss(ignore_index=0)
         self.cnt = 0
         
     def init_weights(self):
@@ -43,11 +43,12 @@ class Seq2seq(nn.Module):
             pred = pred[:, :-1].contiguous()
             bs, seq,_ = pred.size()
             loss = self.criterion(pred.view(bs*seq, -1), truth.view(-1))
-
             pred_ = torch.argmax(pred, dim=-1)
 
-            truth_ = sum(pred_.eq(truth).float()) / sum(1-truth.eq(0).float())
-            truth_ = torch.mean(truth_*100)
+            not_padd = 1-truth.eq(0).float()
+            pred_ *= torch.LongTensor(not_padd)
+            truth_ = sum(pred_.eq(truth).float())/sum(not_padd)
+            truth_ = torch.mean(truth_)*100
 
             return loss, truth_
 

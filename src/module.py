@@ -9,6 +9,7 @@ class Encoder(nn.Module):
     def __init__(self, vocab_size, hidden=1000, num_layers=4):
         super(Encoder, self).__init__()
         self.embedding = nn.Embedding(vocab_size, hidden)
+        self.dropout = nn.Dropout(0.2)
         self.lstm = nn.LSTM(hidden, hidden, num_layers=num_layers, dropout=0.2)
 
     def init_weights(self):
@@ -16,6 +17,7 @@ class Encoder(nn.Module):
 
     def forward(self, x):
         output =self.embedding(x)
+        output =  self.dropout(output)
         output ,h = self.lstm(output)
         return output, h
 
@@ -23,11 +25,12 @@ class Decoder(nn.Module):
     def __init__(self, vocab_size=None, hidden=1000, max_sent=50, num_layers=4,  method = None):
         super(Decoder, self).__init__()
         self.embedding = nn.Embedding(vocab_size, hidden)
+        self.dropout = nn.Dropout(0.2)
         self.lstm = nn.LSTM(hidden, hidden, num_layers=num_layers, dropout=0.2)
         self.attn = Attention(method, hidden, max_sent)
-        self.linear = nn.Linear(2*hidden, hidden)
+        self.linear = nn.Linear(2*hidden, hidden, bias=False)
         self.activation = nn.Tanh()
-        self.span = nn.Linear(hidden, vocab_size)
+        self.span = nn.Linear(hidden, vocab_size, bias=False)
 
     def init_weights(self):
         self.embedding.weight.data.uniform_(-0.1, 0.1)
@@ -35,7 +38,7 @@ class Decoder(nn.Module):
         self.span.weight.data.uniform_(-0.1, 0.1)
 
     def forward(self, h_s, decoder_input, attn_mask=None):
-        h_t, _ = self.lstm(self.embedding(decoder_input))
+        h_t, _ = self.lstm(self.dropout(self.embedding(decoder_input)))
         context = self.attn(h_s, h_t, mask=attn_mask)
         output = torch.cat([context, h_t], dim=-1)
         output = self.activation(self.linear(output))
@@ -49,8 +52,7 @@ class Decoder(nn.Module):
         :param h_s: (bs, seq, dim)
         :param attn_mask : (bs, seq)
         """
-
-        h_t, _ = self.lstm(self.embedding(decoder_input)) # h_t : (bs, 1, dim)
+        h_t, _ = self.lstm(self.dropout(self.embedding(decoder_input))) # h_t : (bs, 1, dim)
         context = self.attn(h_s, h_t, mask=attn_mask) # (bs,1,dim)
         output = torch.cat([context,h_t], dim=-1) #(bs, 1, 2*dim)
         output = self.activation(self.linear(output)) # (bs, 1, dim)
@@ -101,4 +103,5 @@ if __name__ =='__main__':
     context = decoder(h_s,decoder_x,encoder_x)
     print(torch.argmax(context, dim=-1))
     print(decoder_x)
+
 

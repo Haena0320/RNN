@@ -94,8 +94,8 @@ class Trainer:
                                     "lr_step":self.scheduler._step},
                                    save_path+'ckpnt_{}'.format(epoch))
 
-                    self.log_writer(loss.data, self.global_step)
-                    self.writer.add_scalar("train/accuracy",pred.data, self.global_step)
+                    self.log_writer(loss.item(), self.global_step)
+                    self.writer.add_scalar("train/accuracy",pred.item(), self.global_step)
                     self.gradscaler.scale(loss).backward()
                     self.gradscaler.unscale_(self.optimizer)
                     torch.nn.utils.clip_grad_norm_(model.parameters(), self.config.train.clip)
@@ -104,31 +104,25 @@ class Trainer:
                     self.optimizer.zero_grad()
 
                 else:
-                    prediction = model(en_x, dn_x, predict=True)
-                    bs, _ =prediction.size()
+                    y = model(encoder_input, decoder_input, predict=True)  # (bs, seq)
+                    tokens = y.tolist()
 
-                    pred = list()
-                    truth = list()
-                    for i in range(bs):
-                        p = prediction[i,:]
-                        p = p.tolist()
-                        for j in range(len(p)):
-                            if p[j] ==2: # end token
-                                p = p[:j]
+                    for i, token in enumerate(tokens):
+                        for j in range(len(token)):
+                            if token[j] == 2:
+                                token = token[:j]
                                 break
-                        de_token = sp.DecodeIds(p)
-                        de_truth = sp.DecodeIds(dn_x[i,:].tolist())
-                        pred.append(de_token)
-                        truth.append(de_truth)
-                    pred = [self.md.detokenize(i.strip().split()) for i in pred]
-                    truth = [self.md.detokenize(i.strip().split()) for i in truth]
+                        decode_tokens = [sp[t] for t in token] # sp : id2word
+                        print(decode_tokens)
 
-                    print("truth ver {}".format(truth[0]))
-                    print("prediction ver {}".format(pred[0]))
-
-                    assert len(pred) == len(truth)
-                    bleu = [sacrebleu.corpus_bleu(pred[i], truth[i]).score for i in range(len(pred))]
-                    total_bleu.append(sum(bleu)/len(bleu))
+                        decode_truth = [sp[t] for t in decoder_input[i, :].tolist()]
+                        print(decode_truth)
+                        pred = md.detokenize(decode_tokens.strip().split())
+                        truth = md.detokenize(decode_truth.strip().split())
+                        bleu = sacrebleu.corpus_bleu(pred, truth)
+                        print(bleu.score)
+                        print("---------------------------------------------------------")
+                        total_bleu.append(bleu.score)
 
 
         if self.type == "train":

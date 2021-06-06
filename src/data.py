@@ -42,7 +42,7 @@ def make_padding(samples):
     def padd(samples):
         length = [len(s) for s in samples]
         max_length = 51
-        batch = 3*torch.ones(len(length), max_length).to(torch.long)
+        batch = torch.zeros(len(length), max_length).to(torch.long)
         for idx, sample in enumerate(samples):
             if length[idx] < max_length:
                 batch[idx, :length[idx]] = torch.LongTensor(sample)
@@ -60,8 +60,9 @@ class Make_Dataset(Dataset):
         self.encoder_input = torch.load(path[0])
         self.decoder_input = torch.load(path[1])
 
-        self.encoder_input = np.array(self.encoder_input, dtype=object)
-        self.decoder_input = np.array(self.decoder_input, dtype=object)
+        self.encoder_input = np.array(self.encoder_input)
+        self.decoder_input = np.array(self.decoder_input)
+        assert len(self.encoder_input) == len(self.decoder_input)
 
     def __len__(self):
         return len(self.encoder_input)
@@ -70,3 +71,122 @@ class Make_Dataset(Dataset):
         return {'encoder':torch.LongTensor(self.encoder_input[idx]), "decoder":torch.LongTensor(self.decoder_input[idx])}
 
 
+# #######################################################################################################################
+# with open("/hdd1/user15/workspace/RNN/data/raw/en_de/vocab/vocab.50K.de.txt") as f:
+#     de_vocab = f.readlines()
+#     de_vocab = [de.split('\n')[0] for de in de_vocab]
+#     vocab = dict()
+#     vocab["[pad]"] = 0
+#     vocab["[bos]"] = 1
+#     vocab['[eos]'] = 2
+#     vocab["[unk]"] = 3
+#     for d in de_vocab:
+#         vocab[d] = len(vocab)
+#     torch.save(vocab, "/hdd1/user15/workspace/RNN/data/prepro/en_de/de_vocab.pkl")
+#
+# with open("/hdd1/user15/workspace/RNN/data/raw/en_de/vocab/vocab.50K.en.txt") as f:
+#     en_vocab = f.readlines()
+#     en_vocab = [en.split('\n')[0] for en in en_vocab]
+#     vocab = dict()
+#     vocab["[pad]"] = 0
+#     vocab["[bos]"] = 1
+#     vocab['[eos]'] = 2
+#     vocab["[unk]"] = 3
+#     for d in en_vocab:
+#         vocab[d] = len(vocab)
+#     torch.save(vocab, "/hdd1/user15/workspace/RNN/data/prepro/en_de/en_vocab.pkl")
+#
+#
+# vocab = torch.load("/hdd1/user15/workspace/RNN/data/prepro/en_de/en_vocab.pkl")
+#
+# with open("/hdd1/user15/workspace/RNN/data/raw/en_de/test/newstest2014.en.txt") as f:
+#     en_test = f.readlines()
+#     en_test = [en.split("\n")[0] for en in en_test]
+#     en_test_prepro = list()
+#     for en in en_test:
+#         new_list =[vocab.get("[bos]")]
+#         for e in en.split()[::-1]:
+#             if e in vocab:
+#                 new_list.append(vocab.get(e))
+#             else:
+#                 continue
+#         new_list += [vocab.get("[eos]")]
+#
+#         if len(new_list) > 50:
+#             new_list = new_list[:50]
+#         else:
+#             pad_ = 50 - len(new_list)
+#             new_list += pad_*[0]
+#         assert len(new_list) == 50
+#         en_test_prepro.append(new_list)
+#
+# torch.save(en_test_prepro, "/hdd1/user15/workspace/RNN/data/prepro/en_de/test/test.en.pkl")
+#
+#
+# with open("/hdd1/user15/workspace/RNN/data/raw/en_de/train/train.en.txt") as f:
+#     en_test = f.readlines()
+#     en_test = [en.split("\n")[0] for en in en_test]
+#     en_test_prepro = list()
+#     for en in en_test:
+#         new_list = [vocab.get("[bos]")]
+#         for e in en.split()[::-1]:
+#             if e in vocab:
+#                 new_list.append(vocab.get(e))
+#             else:
+#                 continue
+#         new_list += [vocab.get("[eos]")]
+#
+#         if len(new_list) > 50:
+#             new_list = new_list[:50]
+#         else:
+#             pad_ = 50 - len(new_list)
+#             new_list += pad_*[0]
+#         assert len(new_list) == 50
+#         en_test_prepro.append(new_list)
+# torch.save(en_test_prepro, "/hdd1/user15/workspace/RNN/data/prepro/en_de/train/train.en.pkl")
+#
+#
+# vocab = torch.load("/hdd1/user15/workspace/RNN/data/prepro/en_de/de_vocab.pkl")
+#
+# with open("/hdd1/user15/workspace/RNN/data/raw/en_de/test/newstest2014.de.txt") as f:
+#     en_test = f.readlines()
+#     en_test = [en.split("\n")[0] for en in en_test]
+#     en_test_prepro = list()
+#     for en in en_test:
+#         new_list = [vocab.get("[bos]")]
+#         for e in en.split()[::-1]:
+#             if e in vocab:
+#                 new_list.append(vocab.get(e))
+#             else:
+#                 continue
+#         new_list += [vocab.get("[eos]")]
+#         if len(new_list) > 50:
+#             new_list = new_list[:50]
+#         else:
+#             pad_ = 50 - len(new_list)
+#             new_list += pad_*[0]
+#         assert len(new_list) == 50
+#         en_test_prepro.append(new_list)
+# torch.save(en_test_prepro, "/hdd1/user15/workspace/RNN/data/prepro/en_de/test/test.de.pkl")
+#
+# with open("/hdd1/user15/workspace/RNN/data/raw/en_de/train/train.de.txt") as f:
+#     en_test = f.readlines()
+#     en_test = [en.split("\n")[0] for en in en_test]
+#     en_test_prepro = list()
+#     for en in en_test:
+#         new_list = [vocab.get("[bos]")]
+#         for e in en.split()[::-1]:
+#             if e in vocab:
+#                 new_list.append(vocab.get(e))
+#             else:
+#                 continue
+#         new_list += [vocab.get("[eos]")]
+#         if len(new_list) > 50:
+#             new_list = new_list[:50]
+#         else:
+#             pad_ = 50 - len(new_list)
+#             new_list += pad_*[0]
+#         assert len(new_list) == 50
+#         en_test_prepro.append(new_list)
+# torch.save(en_test_prepro, "/hdd1/user15/workspace/RNN/data/prepro/en_de/train/train.de.pkl")
+# #######################################################################################################################

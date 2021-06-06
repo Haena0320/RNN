@@ -30,7 +30,7 @@ use_cuda = torch.cuda.is_available()
 device = torch.device("cuda:{}".format(args.gpu) if use_cuda and args.gpu is not None else "cpu")
 print("current device {}".format(device))
 ## model load -> valid -> best_ckpnt
-checkpoint = torch.load("/user15/workspace/RNN/log/g/ckpntckpnt_3", map_location=device)
+checkpoint = torch.load("/hdd1/user15/workspace/RNN/log/g/ckpntckpnt_1", map_location=device)
 model  = Seq2seq(config, args, device)
 model.to(device)
 model.load_state_dict(checkpoint["model_sate_dict"])
@@ -67,7 +67,7 @@ for data_iter in tqdm(data_loader):
 
     y = model(encoder_input, decoder_input, predict=True) #(bs, seq)
     tokens = y.tolist()
-    print(len(tokens))
+    
     for i, token in enumerate(tokens):
         for j in range(len(token)):
             if token[j] == 2:

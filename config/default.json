@@ -1,5 +1,5 @@
 {"train": {"epoch": 12, "optim": "sgd", "bs": 128, "warmup": 8, "clip": 1},
-"model": {"vocab_size": 50000, "max_sent_len": 50},
+"model": {"vocab_size": 50005, "max_sent_len": 50},
 "lstm": {"num_layers": 4, "hidden": 1000, "d_rate": 0.2},
 "data_info": {"raw_en_total": "./data/raw/en_de/train/en_all.txt",
                 "raw_de_total": "./data/raw/en_de/train/de_all.txt",

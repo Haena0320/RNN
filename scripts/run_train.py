@@ -39,6 +39,15 @@ if not os.path.exists(model_dir):
     os.mkdir(eval_dir)
 writer = SummaryWriter(loss_dir)
 
+## bleu score calculation
+
+import sacrebleu
+from sacremoses import MosesDetokenizer
+md = MosesDetokenizer(lang="du")
+
+sp = torch.load("/hdd1/user15/workspace/RNN/data/prepro/en_de/de_vocab.pkl")
+sp = {v:k for k,v in sp.items()}
+
 ## data load
 from src.data import *
 data = config.data_info
@@ -46,7 +55,7 @@ train_data = [data.prepro_tr_en, data.prepro_tr_de]
 
 test_data = [data.prepro_te_en, data.prepro_te_de]
 train_loader = get_data_loader(train_data, config.train.bs)
-#test_loader = get_data_loader(test_data, config.train.bs)
+test_loader = get_data_loader(test_data, config.train.bs)
 
 ## model load
 from src.model import Seq2seq
@@ -57,7 +66,7 @@ model.init_weights()
 
 # trainer load
 trainer = train.get_trainer(config, args,device, train_loader, writer, "train")
-#tester = train.get_trainer(config, args,device, test_loader, writer, "test")
+tester = train.get_trainer(config, args,device, test_loader, writer, "test")
 
 if args.use_pretrained:
     ck_path = model_dir+"/ckpntckpnt_{}".format(args.use_pretrained)
@@ -90,8 +99,5 @@ print("total epoch {}".format(total_epoch))
 
 for epoch in tqdm(range(1, total_epoch+1)):
     trainer.train_epoch(model, epoch, save_path=ckpnt_dir)
-   # tester.train_epoch(model, epoch, save_path=ckpnt_dir)
+    tester.train_epoch(model, epoch, save_path=ckpnt_dir, sp=sp)
 print('finished...')
-
-
-
