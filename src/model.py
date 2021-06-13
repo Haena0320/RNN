@@ -33,24 +33,16 @@ class Seq2seq(nn.Module):
         """
 
         h_s, _ = self.encoder(en_input)
-        attn_mask = en_input.eq(0).float() # (bs, seq) = (128, 50)
+        attn_mask = en_input.detach().eq(0).float() # (bs, seq) = (128, 50)
 
         if predict == False:
-            self.cnt +=1
-            truth = de_input[:, 1:].contiguous()
-
+            truth = de_input[:, 1:].detach().contiguous()
             pred = self.decoder(h_s, de_input, attn_mask)
             pred = pred[:, :-1].contiguous()
             bs, seq,_ = pred.size()
             loss = self.criterion(pred.view(bs*seq, -1), truth.view(-1))
-            pred_ = torch.argmax(pred, dim=-1)
 
-            not_padd = 1-truth.eq(0).float()
-            pred_ *= torch.LongTensor(not_padd)
-            truth_ = sum(pred_.eq(truth).float())/sum(not_padd)
-            truth_ = torch.mean(truth_)*100
-
-            return loss, truth_
+            return loss 
 
         else: # predict mode
             h_t = de_input[:,0] #(bs)

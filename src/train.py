@@ -41,6 +41,8 @@ class Warmupscheduler:
 
 
 
+
+
 class Trainer:
     def __init__(self, config, args, device,data_loader,writer, type):
         self.config = config
@@ -69,7 +71,7 @@ class Trainer:
         else:
             self.writer.add_scalar("valid/loss", log, step)
 
-    def train_epoch(self, model, epoch, save_path=None, sp=None):
+    def train_epoch(self, model, epoch, save_path=None, sp=None, md=None):
         if self.type =="train":
             model.train()
 
@@ -85,7 +87,7 @@ class Trainer:
                 dn_x = iter["decoder"].to(self.device) # 128, 51 [0,1,2,3,4]
 
                 if self.type =="train":
-                    loss, pred = model(en_x, dn_x, predict=False)
+                    loss = model(en_x, dn_x, predict=False)
                     self.global_step += 1
                     if self.global_step % self.ckpnt_step ==0:
                         torch.save({"epoch":epoch,
@@ -95,7 +97,7 @@ class Trainer:
                                    save_path+'ckpnt_{}'.format(epoch))
 
                     self.log_writer(loss.item(), self.global_step)
-                    self.writer.add_scalar("train/accuracy",pred.item(), self.global_step)
+                    #self.writer.add_scalar("train/accuracy",pred.item(), self.global_step)
                     self.gradscaler.scale(loss).backward()
                     self.gradscaler.unscale_(self.optimizer)
                     torch.nn.utils.clip_grad_norm_(model.parameters(), self.config.train.clip)
@@ -104,7 +106,7 @@ class Trainer:
                     self.optimizer.zero_grad()
 
                 else:
-                    y = model(encoder_input, decoder_input, predict=True)  # (bs, seq)
+                    y = model(en_x, dn_x, predict=True)  # (bs, seq)
                     tokens = y.tolist()
 
                     for i, token in enumerate(tokens):
@@ -112,10 +114,18 @@ class Trainer:
                             if token[j] == 2:
                                 token = token[:j]
                                 break
-                        decode_tokens = [sp[t] for t in token] # sp : id2word
+                        decode_tokens = [sp[t] for t in token]
+                        decode_tokens = " ".join(decode_tokens)
                         print(decode_tokens)
 
-                        decode_truth = [sp[t] for t in decoder_input[i, :].tolist()]
+                        decode_truth = dn_x[i, :].tolist()
+
+                        for idx in range(len(decode_truth)):
+                            if decode_truth[idx] == 2:
+                                decode_truth = decode_truth[1:idx]
+                                break
+                        decode_truth = [sp[t] for t in decode_truth]
+                        decode_truth = " ".join(decode_truth)
                         print(decode_truth)
                         pred = md.detokenize(decode_tokens.strip().split())
                         truth = md.detokenize(decode_truth.strip().split())

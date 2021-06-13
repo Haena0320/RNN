@@ -14,6 +14,13 @@ class Encoder(nn.Module):
 
     def init_weights(self):
         self.embedding.weight.data.uniform_(-0.1, 0.1)
+        for layer in self.lstm.all_weights:
+            for weight in layer:
+                if weight.ndim == 2:
+                    weight.data.uniform_(-0.1,0.1) # weight matrix
+                else:
+                    weight.data.fill_(0) # bias
+        return None
 
     def forward(self, x):
         output =self.embedding(x)
@@ -34,6 +41,13 @@ class Decoder(nn.Module):
 
     def init_weights(self):
         self.embedding.weight.data.uniform_(-0.1, 0.1)
+        for layer in self.lstm.all_weights:
+            for weight in layer:
+                if weight.ndim == 2:
+                    weight.data.uniform_(-0.1, 0.1) # weight matrix
+                else:
+                    weight.data.fill_(0) # bias
+        
         self.linear.weight.data.uniform_(-0.1, 0.1)
         self.span.weight.data.uniform_(-0.1, 0.1)
 
@@ -65,6 +79,7 @@ class Attention(nn.Module):
         self.method = method
         if method =="location":
             self.linear = nn.Linear(hidden, max_sent+1, bias=False)
+            self.linear.weight.data.uniform_(-0.1, 0.1)
         else:
             self.linear = nn.Linear(hidden, hidden, bias=False)
         self.softmax = nn.Softmax(dim=-1)

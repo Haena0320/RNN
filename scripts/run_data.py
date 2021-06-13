@@ -5,6 +5,7 @@ import logging
 from tqdm import tqdm
 from src.utils import *
 from src.data import *
+from tqdm import tqdm
 
 config = load_config("default")
 
@@ -26,7 +27,12 @@ de_prepro = [data_info.prepro_tr_de, data_info.prepro_te_de]
 for input, output in tqdm(list(zip(de_raw, de_prepro))):
     data_prepro(input, output, data_info.model_name.de+'.model')
 
-print("finished !! ")
+logging.info("filter out data exceeding 51 tokens ! ")
+tr_list = [data_info.prepro_tr_en, data_info.prepro_tr_de]
+te_list = [data_info.prepro_te_en, data_info.prepro_te_de]
+filter_out(tr_list)
+filter_out(te_list)
+("finished !! ")
 
 
 

@@ -45,7 +45,7 @@ import sacrebleu
 from sacremoses import MosesDetokenizer
 md = MosesDetokenizer(lang="du")
 
-sp = torch.load("/hdd1/user15/workspace/RNN/data/prepro/en_de/de_vocab.pkl")
+sp = torch.load("./data/prepro/en_de/de_vocab.pkl")
 sp = {v:k for k,v in sp.items()}
 
 ## data load
@@ -83,7 +83,7 @@ if args.use_pretrained:
     trainer.init_optimizer(optimizer)
     trainer.init_scheduler(scheduler)
 
-    total_epoch = 10
+    total_epoch = 12
     model.train()
 
 else:
@@ -99,5 +99,6 @@ print("total epoch {}".format(total_epoch))
 
 for epoch in tqdm(range(1, total_epoch+1)):
     trainer.train_epoch(model, epoch, save_path=ckpnt_dir)
-    tester.train_epoch(model, epoch, save_path=ckpnt_dir, sp=sp)
+    tester.train_epoch(model, epoch, save_path=ckpnt_dir, sp=sp, md=md)
 print('finished...')
+
