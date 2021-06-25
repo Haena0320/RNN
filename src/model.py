@@ -9,53 +9,39 @@ class Seq2seq(nn.Module):
     def __init__(self, config, args, device):
         super(Seq2seq, self).__init__()
         self.device = device
-        vocab_size = config.model.vocab_size
-        hidden = config.lstm.hidden
-        num_layers = config.lstm.num_layers
-        self.max_sent = config.model.max_sent_len
-        method = args.method
+        self.vocab_size = config.model.vocab_size
+        embed_dim = config.embed.dimension
+        lstm_dim = config.lstm.hidden
+        lstm_layers = config.lstm.num_layers
+        max_sent = config.model.max_sent_len
+        self.input_feed = args.input_feed
+        dropout = config.model.dropout
 
-        self.encoder = Encoder(vocab_size, hidden, num_layers)
-        self.decoder = Decoder(vocab_size, hidden, self.max_sent, num_layers, method)
-        self.criterion = nn.CrossEntropyLoss(ignore_index=0)
-        self.cnt = 0
+        self.encoder = Encoder(self.vocab_size, embed_dim, lstm_dim,lstm_layers, dropout)
+        self.decoder = Decoder(self.vocab_size,embed_dim, lstm_dim,lstm_layers, dropout, max_sent,self.input_feed, device)
+        self.linear = nn.Linear(lstm_dim, self.vocab_size, bias=False)
         
     def init_weights(self):
         self.encoder.init_weights()
         self.decoder.init_weights()
+        self.linear.weight.data.uniform_(-0.1, 0.1)
 
-    def forward(self, en_input, de_input, predict=False):
-        """
-        :param en_input: [4,3,2,1]
-        :param de_input: [0,1,2,3]
-        :param predict: [1,2,3,4]
-        :return:
-        """
+    def forward(self, en_input, de_input, hidden, hht):
+        bs, max_len = de_input.size()
+        h_s, hidden = self.encoder(en_input, hidden)
+        output = torch.zeros(bs, max_len, self.vocab_size)
+        if self.input_feed:
+            for i in range(max_sent):
+                hht, hidden = self.decoder(de_input[:,i].unsqueeze(1), hht, hidden, h_s)
+                out = self.linear(hht)
+                output[:, i] = out.squeeze()
+        else:
+            hht, hidden = self.decoder(de_input, hht, hidden, h_s)
+            output = self.linear(hht)
+        return output
 
-        h_s, _ = self.encoder(en_input)
-        attn_mask = en_input.detach().eq(0).float() # (bs, seq) = (128, 50)
 
-        if predict == False:
-            truth = de_input[:, 1:].detach().contiguous()
-            pred = self.decoder(h_s, de_input, attn_mask)
-            pred = pred[:, :-1].contiguous()
-            bs, seq,_ = pred.size()
-            loss = self.criterion(pred.view(bs*seq, -1), truth.view(-1))
 
-            return loss 
-
-        else: # predict mode
-            h_t = de_input[:,0] #(bs)
-            h_t = h_t.unsqueeze(1) #(bs, 1)
-            for idx in range(self.max_sent):
-                output = self.decoder.search(h_s, h_t, attn_mask) #(bs, n, vocab)
-                output = torch.argmax(output, dim=-1) #(bs, n)
-                if len(output.size()) > 1:
-                    output = output[:,-1].unsqueeze(1)
-                else:
-                    output = output.unsqueeze(1)
-                h_t = torch.cat([h_t, output], dim=-1)
-            return h_t[:, 1:].long() #(bs, max_sent-1)
 
 
 

@@ -6,6 +6,7 @@ import sacrebleu
 from sacremoses import MosesDetokenizer
 from tqdm import tqdm
 import tqdm
+import torch.nn as nn
 
 def get_trainer(config, args, device, data_loader, writer, type):
     return Trainer(config, args, device, data_loader, writer, type)
@@ -53,6 +54,10 @@ class Trainer:
         self.writer = writer
         self.global_step = 0
         self.ckpnt_step = 1000
+        self.lstm_layer = config.lstm.num_layers
+        self.bs = config.train.bs
+        self.lstm_dim = config.lstm.hidden
+        self.max_sent = config.model.max_sent_len
         self.gradscaler = amp.GradScaler()
         if self.type != "train":
             self.md = MosesDetokenizer(lang="du")
@@ -74,6 +79,7 @@ class Trainer:
     def train_epoch(self, model, epoch, save_path=None, sp=None, md=None):
         if self.type =="train":
             model.train()
+            self.criterion = nn.CrossEntropyLoss(ignore_index=2)
 
         else:
             model.eval()
@@ -87,7 +93,16 @@ class Trainer:
                 dn_x = iter["decoder"].to(self.device) # 128, 51 [0,1,2,3,4]
 
                 if self.type =="train":
-                    loss = model(en_x, dn_x, predict=False)
+                    h_0 = torch.zeros(self.lstm_layer, self.bs, self.lstm_dim).to(self.device)
+                    c_0 = torch.zeros(self.lstm_layer, self.bs, self.lstm_dim).to(self.device)
+                    hidden = (h_0, c_0)
+                    hidden = [state.detach().to(self.device) for state in hidden]
+
+                    hht = torch.zeros(self.bs, self.max_sent, self.lstm_dim)
+                    output  = model(en_x, dn_x, hidden, hht)
+                    max_sent = 50
+                    loss = self.criterion(output[:,:-1, :].reshape(self.bs*max_sent, -1), dn_x[:,1:].reshape(-1))
+
                     self.global_step += 1
                     if self.global_step % self.ckpnt_step ==0:
                         torch.save({"epoch":epoch,
@@ -97,7 +112,6 @@ class Trainer:
                                    save_path+'ckpnt_{}'.format(epoch))
 
                     self.log_writer(loss.item(), self.global_step)
-                    #self.writer.add_scalar("train/accuracy",pred.item(), self.global_step)
                     self.gradscaler.scale(loss).backward()
                     self.gradscaler.unscale_(self.optimizer)
                     torch.nn.utils.clip_grad_norm_(model.parameters(), self.config.train.clip)
@@ -106,10 +120,24 @@ class Trainer:
                     self.optimizer.zero_grad()
 
                 else:
-                    y = model(en_x, dn_x, predict=True)  # (bs, seq)
-                    tokens = y.tolist()
+                    h_0 = torch.zeros(self.lstm_layer, self.bs, self.lstm_dim).to(self.device)
+                    c_0 = torch.zeros(self.lstm_layer, self.bs, self.lstm_dim).to(self.device)
+                    hidden = (h_0, c_0)
 
-                    for i, token in enumerate(tokens):
+                    hht = torch.zeros(self.bs, 1, self.lstm_dim).to(self.device)
+                    de_x = torch.ones(self.bs, 1).to(torch.long).to(self.device)
+                    hidden = [state.to(self.device) for state in hidden]
+
+                    for i in range(self.max_sent):
+                        out = model(en_x, de_x, hidden, hht)
+                        out = out.to(self.device)
+                        pred = torch.max(out, dim=-1)[1]
+                        de_x = torch.cat((de_x, pred[:, i].unsqueeze(1)), dim=1)
+
+                    pred_tokens= de_x[:,1:]
+                    pred_tokens = pred_tokens.tolist()
+
+                    for i, token in enumerate(pred_tokens):
                         for j in range(len(token)):
                             if token[j] == 2:
                                 token = token[:j]
@@ -140,14 +168,5 @@ class Trainer:
             return None
         else:
             print("total_bleu per epoch : {}".format(sum(total_bleu)/len(total_bleu)))
-
-
-
-
-
-
-
-
-
 
 

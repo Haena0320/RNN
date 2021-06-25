@@ -102,8 +102,8 @@ class Make_Dataset(Dataset):
         self.encoder_input = torch.load(path[0])
         self.decoder_input = torch.load(path[1])
 
-        self.encoder_input = np.array(self.encoder_input)
-        self.decoder_input = np.array(self.decoder_input)
+        self.encoder_input = np.array(self.encoder_input, dtype=object)
+        self.decoder_input = np.array(self.decoder_input, dtype=object)
         assert len(self.encoder_input) == len(self.decoder_input)
 
     def __len__(self):
@@ -213,8 +213,9 @@ de_train_filtered = list()
 
 for en, de in list(zip(en_train_prepro, de_train_prepro)):
     if (len(en)< 51) and (len(de)< 51):
-        en_train_filtered.append(en)
-        de_train_filtered.append(de)
+        if abs(len(en)-len(de)) < 10:
+            en_train_filtered.append(en)
+            de_train_filtered.append(de)
 
 torch.save(en_train_prepro, "./data/prepro/en_de/train/train.en.pkl")
 torch.save(de_train_prepro, "./data/prepro/en_de/train/train.de.pkl")
@@ -224,9 +225,10 @@ de_test_filtered = list()
 
 for en, de in list(zip(en_test_prepro, de_test_prepro)):
     if (len(en)< 51) and (len(de)< 51):
-        en_test_filtered.append(en)
-        de_test_filtered.append(de)
-
+        
+        if abs(len(en)-len(de)) < 10:
+            en_test_filtered.append(en)
+            de_test_filtered.append(de)
 
 torch.save(en_test_filtered, "./data/prepro/en_de/test/test.en.pkl")
 torch.save(de_test_filtered, "./data/prepro/en_de/test/test.de.pkl")

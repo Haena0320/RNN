@@ -6,11 +6,11 @@ import torch.nn.functional as F
 # encoder (lstm)
 
 class Encoder(nn.Module):
-    def __init__(self, vocab_size, hidden=1000, num_layers=4):
+    def __init__(self, vocab_size, embed_dim, lstm_dim,lstm_layers, dropout):
         super(Encoder, self).__init__()
-        self.embedding = nn.Embedding(vocab_size, hidden)
-        self.dropout = nn.Dropout(0.2)
-        self.lstm = nn.LSTM(hidden, hidden, num_layers=num_layers, dropout=0.2)
+        self.embedding = nn.Embedding(vocab_size, embed_dim)
+        self.dropout = nn.Dropout(dropout)
+        self.lstm = nn.LSTM(embed_dim, lstm_dim, lstm_layers, batch_first=True, dropout=dropout)
 
     def init_weights(self):
         self.embedding.weight.data.uniform_(-0.1, 0.1)
@@ -22,22 +22,25 @@ class Encoder(nn.Module):
                     weight.data.fill_(0) # bias
         return None
 
-    def forward(self, x):
+    def forward(self, x, hidden):
         output =self.embedding(x)
         output =  self.dropout(output)
-        output ,h = self.lstm(output)
+        output ,h = self.lstm(output, hidden)
         return output, h
 
 class Decoder(nn.Module):
-    def __init__(self, vocab_size=None, hidden=1000, max_sent=50, num_layers=4,  method = None):
+    def __init__(self, vocab_size,embed_dim, lstm_dim,lstm_layer, dropout, max_sent,input_feed, device):
         super(Decoder, self).__init__()
-        self.embedding = nn.Embedding(vocab_size, hidden)
-        self.dropout = nn.Dropout(0.2)
-        self.lstm = nn.LSTM(hidden, hidden, num_layers=num_layers, dropout=0.2)
-        self.attn = Attention(method, hidden, max_sent)
-        self.linear = nn.Linear(2*hidden, hidden, bias=False)
-        self.activation = nn.Tanh()
-        self.span = nn.Linear(hidden, vocab_size, bias=False)
+        self.input_feed = input_feed
+        self.embedding = nn.Embedding(vocab_size, embed_dim)
+        self.dropout = nn.Dropout(dropout)
+
+        if input_feed:
+            self.lstm = nn.LSTM(embed_dim+lstm_dim, lstm_dim, lstm_layer,batch_first=True ,dropout=dropout)
+        else:
+            self.lstm = nn.LSTM(embed_dim, lstm_dim, lstm_layer,batch_first=True ,dropout=dropout)
+        self.attention = Attention(lstm_dim, max_sent,input_feed, device)
+        self.linear = nn.Linear(2*lstm_dim, lstm_dim, bias=False)
 
     def init_weights(self):
         self.embedding.weight.data.uniform_(-0.1, 0.1)
@@ -47,64 +50,50 @@ class Decoder(nn.Module):
                     weight.data.uniform_(-0.1, 0.1) # weight matrix
                 else:
                     weight.data.fill_(0) # bias
-        
+
+        self.attention.init_weights()
         self.linear.weight.data.uniform_(-0.1, 0.1)
-        self.span.weight.data.uniform_(-0.1, 0.1)
-
-    def forward(self, h_s, decoder_input, attn_mask=None):
-        h_t, _ = self.lstm(self.dropout(self.embedding(decoder_input)))
-        context = self.attn(h_s, h_t, mask=attn_mask)
-        output = torch.cat([context, h_t], dim=-1)
-        output = self.activation(self.linear(output))
-        output = self.span(output)
-        return output
 
 
-    def search(self,h_s,decoder_input, attn_mask=None):
-        """
-        :param decoder_input: (bs, 1)
-        :param h_s: (bs, seq, dim)
-        :param attn_mask : (bs, seq)
-        """
-        h_t, _ = self.lstm(self.dropout(self.embedding(decoder_input))) # h_t : (bs, 1, dim)
-        context = self.attn(h_s, h_t, mask=attn_mask) # (bs,1,dim)
-        output = torch.cat([context,h_t], dim=-1) #(bs, 1, 2*dim)
-        output = self.activation(self.linear(output)) # (bs, 1, dim)
-        output = self.span(output) #(bs, 1, vocab)
-        return output.squeeze(1) #(bs, vocab)
+    def forward(self, x, prev_hht, hidden, encoder_outputs):
+        x = self.embedding(x)
+        x = self.dropout(x)
+        if self.input_feed:
+            x = torch.cat((x, prev_hht), dim=2)
+
+        h_t, hidden = self.lstm(x, hidden)
+        attention_weights = self.attention(h_t, encoder_outputs)
+        context = torch.bmm(attention_weights, encoder_outputs)
+        output = torch.cat((context, h_t), dim=-1)
+        output = torch.tanh(self.linear(output))
+        return output, hidden
+
 
 class Attention(nn.Module):
-    def __init__(self, method, hidden, max_sent=None):
+    def __init__(self, lstm_dim, max_sent,input_feed, device):
         super(Attention, self).__init__()
-        self.method = method
-        if method =="location":
-            self.linear = nn.Linear(hidden, max_sent+1, bias=False)
-            self.linear.weight.data.uniform_(-0.1, 0.1)
-        else:
-            self.linear = nn.Linear(hidden, hidden, bias=False)
-        self.softmax = nn.Softmax(dim=-1)
+        self.att_score = nn.Linear(lstm_dim, max_sent, bias=False)
+        self.input_feed = input_feed
+        self.device = device
 
-    def forward(self, h_s, h_t, mask=None):
+    def init_weights(self):
+        self.att_score.weight.data.uniform_(-0.1, 0.1)
+
+    def forward(self,h_t, h_s):
         """
         :param h_s: (bs, seq_s, dim)
         :param h_t: (bs, 1, dim)
         :param mask: (bs, seq_s, dim)
         :return:
         """
-        if self.method =="location":
-            attn_weight = self.linear(h_t) # (bs, seq_s, seq_s)
-        else: # general
-            attn_weight = self.linear(h_s) #(bs, seq_s, dim)
-            query = h_t.transpose(1,2).contiguous() #(bs, dim, 1)
-            attn_weight = torch.bmm(attn_weight, query).squeeze(-1) #(bs, seq_s)
-            
-        if mask is not None:  # padding -> -inf
-            attn_mask = mask.unsqueeze(1)*(-1e10) # (bs, 1, seq_s)
-            attn_weight = attn_weight + attn_mask
+        bs, max_len, _ = h_s.shape
+        attn_weight = self.att_score(h_t) # (bs, seq_s, seq_s)
 
-        attn_weight =self.softmax(attn_weight) #(bs , seq_s)
-        context = torch.bmm(attn_weight, h_s) # (bs, seq_s, seq_s)
-        return context
+        if self.input_feed:
+            attn_weight = score.view(bs, 1, max_len)
+
+        attn_weight =F.softmax(attn_weight, dim=-1) #(bs , seq_s)
+        return attn_weight
 
 
 if __name__ =='__main__':
