@@ -14,7 +14,7 @@ parser.add_argument("--dataset", type=str, default="en_de")
 parser.add_argument("--model", type=str, default='g')
 parser.add_argument("--reverse", type=str, default=0) # 0:-> on, 1: off
 parser.add_argument("--method", type=str, default="location")
-parser.add_argument("--input_feed", type=str, default=0)
+parser.add_argument("--input_feed", type=int, default=0)
 parser.add_argument("--optim", type=str, default="sgd")
 parser.add_argument("--use_pretrained", type=int, default=0)
 parser.add_argument("--epochs", type=int, default=12)
